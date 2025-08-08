@@ -1,0 +1,24 @@
+table:
+  name: categories
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - name
+        - description
+        - icon
+        - slug
+        - created_at
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - name
+        - description
+        - icon
+        - slug
+        - created_at
+      filter: {}

@@ -1,0 +1,162 @@
+table:
+  name: recipes
+  schema: public
+computed_fields:
+  - name: average_rating
+    definition:
+      function:
+        name: calculate_recipe_rating
+        schema: public
+    comment: Average rating for the recipe
+  - name: total_likes
+    definition:
+      function:
+        name: count_recipe_likes
+        schema: public
+    comment: Total likes for the recipe
+  - name: total_comments
+    definition:
+      function:
+        name: count_recipe_comments
+        schema: public
+    comment: Total comments for the recipe
+object_relationships:
+  - name: category
+    using:
+      foreign_key_constraint_on: category_id
+  - name: user
+    using:
+      foreign_key_constraint_on: user_id
+array_relationships:
+  - name: steps
+    using:
+      foreign_key_constraint_on:
+        column: recipe_id
+        table:
+          name: recipe_steps
+          schema: public
+  - name: ingredients
+    using:
+      foreign_key_constraint_on:
+        column: recipe_id
+        table:
+          name: recipe_ingredients
+          schema: public
+  - name: images
+    using:
+      foreign_key_constraint_on:
+        column: recipe_id
+        table:
+          name: recipe_images
+          schema: public
+  - name: likes
+    using:
+      foreign_key_constraint_on:
+        column: recipe_id
+        table:
+          name: likes
+          schema: public
+  - name: comments
+    using:
+      foreign_key_constraint_on:
+        column: recipe_id
+        table:
+          name: comments
+          schema: public
+  - name: ratings
+    using:
+      foreign_key_constraint_on:
+        column: recipe_id
+        table:
+          name: ratings
+          schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - title
+        - description
+        - prep_time
+        - cook_time
+        - servings
+        - difficulty
+        - category_id
+        - user_id
+        - featured_image_url
+        - is_premium
+        - price
+        - created_at
+        - updated_at
+      filter:
+        is_published:
+          _eq: true
+  - role: user
+    permission:
+      columns:
+        - id
+        - title
+        - description
+        - prep_time
+        - cook_time
+        - servings
+        - difficulty
+        - category_id
+        - user_id
+        - featured_image_url
+        - is_premium
+        - price
+        - is_published
+        - created_at
+        - updated_at
+      filter:
+        _or:
+          - is_published:
+              _eq: true
+          - user_id:
+              _eq: X-Hasura-User-Id
+insert_permissions:
+  - role: user
+    permission:
+      columns:
+        - title
+        - description
+        - prep_time
+        - cook_time
+        - servings
+        - difficulty
+        - category_id
+        - featured_image_url
+        - is_premium
+        - price
+        - is_published
+      check:
+        user_id:
+          _eq: X-Hasura-User-Id
+      set:
+        user_id: X-Hasura-User-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - title
+        - description
+        - prep_time
+        - cook_time
+        - servings
+        - difficulty
+        - category_id
+        - featured_image_url
+        - is_premium
+        - price
+        - is_published
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id
+      check: null
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id

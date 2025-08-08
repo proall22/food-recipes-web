@@ -1,0 +1,286 @@
+version: 3
+sources:
+  - name: default
+    kind: postgres
+    configuration:
+      connection_info:
+        database_url:
+          from_env: PG_DATABASE_URL
+        isolation_level: read-committed
+        pool_settings:
+          connection_lifetime: 600
+          idle_timeout: 180
+          max_connections: 50
+          retries: 1
+        use_prepared_statements: true
+    tables:
+      - table:
+          name: users
+          schema: public
+        configuration:
+          column_config: {}
+          custom_column_names: {}
+          custom_name: users
+          custom_root_fields: {}
+        computed_fields:
+          - name: recipe_count
+            definition:
+              function:
+                name: count_user_recipes
+                schema: public
+            comment: Total number of recipes by user
+        select_permissions:
+          - role: anonymous
+            permission:
+              columns:
+                - id
+                - username
+                - full_name
+                - avatar_url
+                - bio
+                - created_at
+              filter: {}
+          - role: user
+            permission:
+              columns:
+                - id
+                - email
+                - username
+                - full_name
+                - avatar_url
+                - bio
+                - created_at
+                - updated_at
+              filter:
+                id:
+                  _eq: X-Hasura-User-Id
+        update_permissions:
+          - role: user
+            permission:
+              columns:
+                - username
+                - full_name
+                - avatar_url
+                - bio
+              filter:
+                id:
+                  _eq: X-Hasura-User-Id
+              check: null
+
+      - table:
+          name: categories
+          schema: public
+        configuration:
+          column_config: {}
+          custom_column_names: {}
+          custom_name: categories
+          custom_root_fields: {}
+        select_permissions:
+          - role: anonymous
+            permission:
+              columns:
+                - id
+                - name
+                - description
+                - icon
+                - slug
+                - created_at
+              filter: {}
+          - role: user
+            permission:
+              columns:
+                - id
+                - name
+                - description
+                - icon
+                - slug
+                - created_at
+              filter: {}
+
+      - table:
+          name: recipes
+          schema: public
+        configuration:
+          column_config: {}
+          custom_column_names: {}
+          custom_name: recipes
+          custom_root_fields: {}
+        computed_fields:
+          - name: average_rating
+            definition:
+              function:
+                name: calculate_recipe_rating
+                schema: public
+            comment: Average rating for the recipe
+          - name: total_likes
+            definition:
+              function:
+                name: count_recipe_likes
+                schema: public
+            comment: Total likes for the recipe
+          - name: total_comments
+            definition:
+              function:
+                name: count_recipe_comments
+                schema: public
+            comment: Total comments for the recipe
+        object_relationships:
+          - name: category
+            using:
+              foreign_key_constraint_on: category_id
+          - name: user
+            using:
+              foreign_key_constraint_on: user_id
+        array_relationships:
+          - name: steps
+            using:
+              foreign_key_constraint_on:
+                column: recipe_id
+                table:
+                  name: recipe_steps
+                  schema: public
+          - name: ingredients
+            using:
+              foreign_key_constraint_on:
+                column: recipe_id
+                table:
+                  name: recipe_ingredients
+                  schema: public
+          - name: images
+            using:
+              foreign_key_constraint_on:
+                column: recipe_id
+                table:
+                  name: recipe_images
+                  schema: public
+          - name: likes
+            using:
+              foreign_key_constraint_on:
+                column: recipe_id
+                table:
+                  name: likes
+                  schema: public
+          - name: comments
+            using:
+              foreign_key_constraint_on:
+                column: recipe_id
+                table:
+                  name: comments
+                  schema: public
+          - name: ratings
+            using:
+              foreign_key_constraint_on:
+                column: recipe_id
+                table:
+                  name: ratings
+                  schema: public
+        select_permissions:
+          - role: anonymous
+            permission:
+              columns:
+                - id
+                - title
+                - description
+                - prep_time
+                - cook_time
+                - servings
+                - difficulty
+                - category_id
+                - user_id
+                - featured_image_url
+                - is_premium
+                - price
+                - created_at
+                - updated_at
+              filter:
+                is_published:
+                  _eq: true
+          - role: user
+            permission:
+              columns:
+                - id
+                - title
+                - description
+                - prep_time
+                - cook_time
+                - servings
+                - difficulty
+                - category_id
+                - user_id
+                - featured_image_url
+                - is_premium
+                - price
+                - is_published
+                - created_at
+                - updated_at
+              filter:
+                _or:
+                  - is_published:
+                      _eq: true
+                  - user_id:
+                      _eq: X-Hasura-User-Id
+        insert_permissions:
+          - role: user
+            permission:
+              columns:
+                - title
+                - description
+                - prep_time
+                - cook_time
+                - servings
+                - difficulty
+                - category_id
+                - featured_image_url
+                - is_premium
+                - price
+                - is_published
+              check:
+                user_id:
+                  _eq: X-Hasura-User-Id
+              set:
+                user_id: X-Hasura-User-Id
+        update_permissions:
+          - role: user
+            permission:
+              columns:
+                - title
+                - description
+                - prep_time
+                - cook_time
+                - servings
+                - difficulty
+                - category_id
+                - featured_image_url
+                - is_premium
+                - price
+                - is_published
+              filter:
+                user_id:
+                  _eq: X-Hasura-User-Id
+              check: null
+        delete_permissions:
+          - role: user
+            permission:
+              filter:
+                user_id:
+                  _eq: X-Hasura-User-Id
+
+functions:
+  - function:
+      name: calculate_recipe_rating
+      schema: public
+  - function:
+      name: count_recipe_likes
+      schema: public
+  - function:
+      name: count_recipe_comments
+      schema: public
+  - function:
+      name: count_user_recipes
+      schema: public
+  - function:
+      name: search_recipes
+      schema: public
+  - function:
+      name: get_popular_recipes
+      schema: public

@@ -1,0 +1,79 @@
+actions:
+  - name: login
+    definition:
+      kind: synchronous
+      handler: http://golang-backend:8000/api/v1/auth/login
+      forward_client_headers: true
+      type: mutation
+      arguments:
+        - name: email
+          type: String!
+        - name: password
+          type: String!
+      output_type: AuthResponse!
+    permissions:
+      - role: anonymous
+    comment: User login action
+
+  - name: register
+    definition:
+      kind: synchronous
+      handler: http://golang-backend:8000/api/v1/auth/register
+      forward_client_headers: true
+      type: mutation
+      arguments:
+        - name: email
+          type: String!
+        - name: username
+          type: String!
+        - name: full_name
+          type: String!
+        - name: password
+          type: String!
+      output_type: AuthResponse!
+    permissions:
+      - role: anonymous
+    comment: User registration action
+
+  - name: upload_file
+    definition:
+      kind: synchronous
+      handler: http://golang-backend:8000/api/v1/files/upload
+      forward_client_headers: true
+      type: mutation
+      arguments:
+        - name: file
+          type: String!
+      output_type: UploadResponse!
+    permissions:
+      - role: user
+    comment: File upload action
+
+custom_types:
+  objects:
+    - name: AuthResponse
+      fields:
+        - name: token
+          type: String!
+        - name: user
+          type: UserInfo!
+
+    - name: UserInfo
+      fields:
+        - name: id
+          type: String!
+        - name: email
+          type: String!
+        - name: username
+          type: String!
+        - name: full_name
+          type: String!
+
+    - name: UploadResponse
+      fields:
+        - name: url
+          type: String!
+        - name: key
+          type: String!
+        - name: file_name
+          type: String!

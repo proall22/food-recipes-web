@@ -1,0 +1,63 @@
+table:
+  name: users
+  schema: public
+configuration:
+  column_config: {}
+  custom_column_names: {}
+  custom_name: users
+  custom_root_fields: {}
+computed_fields:
+  - name: recipe_count
+    definition:
+      function:
+        name: count_user_recipes
+        schema: public
+    comment: Total number of recipes by user
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - username
+        - full_name
+        - avatar_url
+        - bio
+        - created_at
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - email
+        - username
+        - full_name
+        - avatar_url
+        - bio
+        - created_at
+        - updated_at
+      filter:
+        id:
+          _eq: X-Hasura-User-Id
+insert_permissions:
+  - role: user
+    permission:
+      columns:
+        - email
+        - username
+        - full_name
+        - password_hash
+        - avatar_url
+        - bio
+      check: {}
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - username
+        - full_name
+        - avatar_url
+        - bio
+      filter:
+        id:
+          _eq: X-Hasura-User-Id
+      check: null

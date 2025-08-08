@@ -1,0 +1,32 @@
+- name: default
+  kind: postgres
+  configuration:
+    connection_info:
+      database_url:
+        from_env: PG_DATABASE_URL
+      isolation_level: read-committed
+      pool_settings:
+        connection_lifetime: 600
+        idle_timeout: 180
+        max_connections: 50
+        retries: 1
+      use_prepared_statements: true
+  functions:
+    - function:
+        name: calculate_recipe_rating
+        schema: public
+    - function:
+        name: count_recipe_likes
+        schema: public
+    - function:
+        name: count_recipe_comments
+        schema: public
+    - function:
+        name: count_user_recipes
+        schema: public
+    - function:
+        name: search_recipes
+        schema: public
+    - function:
+        name: get_popular_recipes
+        schema: public
