@@ -232,7 +232,7 @@
 
 				<!-- Rating Section -->
 				<div
-					v-if="isAuthenticated"
+					v-if="isAuthenticated && (!recipe.is_premium || hasPurchased)"
 					class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8"
 				>
 					<h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -261,7 +261,10 @@
 				</div>
 
 				<!-- Comments Section -->
-				<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+				<div 
+					v-if="!recipe.is_premium || hasPurchased"
+					class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+				>
 					<h3 class="text-lg font-semibold text-gray-900 mb-6">
 						Comments ({{ recipe.total_comments || 0 }})
 					</h3>
@@ -283,6 +286,13 @@
 								{{ submittingComment ? "Posting..." : "Post Comment" }}
 							</button>
 						</form>
+					</div>
+					
+					<div v-else class="mb-6 p-4 bg-gray-50 rounded-lg text-center">
+						<p class="text-gray-600 mb-3">Sign in to leave a comment</p>
+						<button @click="$router.push('/?auth=login')" class="btn-primary">
+							Sign In
+						</button>
 					</div>
 
 					<!-- Comments List -->

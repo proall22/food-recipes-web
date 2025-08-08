@@ -283,14 +283,28 @@ const handleSubmit = async () => {
 		}
 
 		if (result.success) {
-			success.value = isSignUp.value
-				? "Account created successfully!"
-				: "Logged in successfully!";
-			setTimeout(() => {
-				$emit("close");
-				// Refresh the page to update the UI
-				window.location.reload();
-			}, 1500);
+			if (isSignUp.value) {
+				success.value = "Account created successfully! Please sign in to continue.";
+				setTimeout(() => {
+					// Switch to login mode after successful signup
+					isSignUp.value = false;
+					success.value = "";
+					form.value = {
+						full_name: "",
+						username: "",
+						email: form.value.email, // Keep email for convenience
+						password: "",
+						confirmPassword: "",
+					};
+				}, 2000);
+			} else {
+				success.value = "Logged in successfully!";
+				setTimeout(() => {
+					$emit("close");
+					// Navigate to dashboard after login
+					navigateTo("/dashboard");
+				}, 1500);
+			}
 		} else {
 			error.value = result.error || "An error occurred";
 		}

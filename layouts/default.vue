@@ -75,58 +75,71 @@
 
 					<!-- User Actions -->
 					<div class="flex items-center space-x-4">
-						<button
-							v-if="!isAuthenticated"
-							@click="showAuthModal = true"
-							class="btn-secondary"
-						>
-							Sign In
-						</button>
-						<button
-							v-if="!isAuthenticated"
-							@click="showAuthModal = true"
-							class="btn-primary"
-						>
-							Sign Up
-						</button>
+						<div v-if="!isAuthenticated" class="flex items-center space-x-3">
+							<button
+								@click="openAuthModal(false)"
+								class="btn-secondary"
+							>
+								Sign In
+							</button>
+							<button
+								@click="openAuthModal(true)"
+								class="btn-primary"
+							>
+								Sign Up
+							</button>
+						</div>
 
 						<!-- Authenticated User Menu -->
 						<div v-if="isAuthenticated" class="flex items-center space-x-3">
-							<NuxtLink to="/create-recipe" class="btn-primary">
-								<PlusIcon class="w-4 h-4 mr-2" />
-								Create Recipe
-							</NuxtLink>
 							<div class="relative">
 								<button
 									@click="showUserMenu = !showUserMenu"
 									class="flex items-center space-x-2 text-gray-700 hover:text-primary-600"
 								>
-									<div class="w-8 h-8 bg-gray-300 rounded-full"></div>
+									<div class="w-8 h-8 rounded-full overflow-hidden bg-gray-200">
+										<img
+											v-if="user?.avatar_url"
+											:src="user.avatar_url"
+											:alt="user.full_name"
+											class="w-full h-full object-cover"
+										/>
+										<div
+											v-else
+											class="w-full h-full flex items-center justify-center bg-primary-100 text-primary-600 font-bold text-sm"
+										>
+											{{ user?.full_name?.charAt(0) || "U" }}
+										</div>
+									</div>
 									<ChevronDownIcon class="w-4 h-4" />
 								</button>
 								<!-- User dropdown menu -->
 								<div
 									v-if="showUserMenu"
-									class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50"
+									class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
 								>
+									<NuxtLink
+										to="/dashboard"
+										class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+										@click="showUserMenu = false"
+									>
+										Dashboard
+									</NuxtLink>
 									<NuxtLink
 										to="/profile"
 										class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+										@click="showUserMenu = false"
 									>
 										Profile
 									</NuxtLink>
 									<NuxtLink
-										to="/my-recipes"
-										class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-									>
-										My Recipes
-									</NuxtLink>
-									<NuxtLink
 										to="/bookmarks"
 										class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+										@click="showUserMenu = false"
 									>
 										Bookmarks
 									</NuxtLink>
+									<div class="border-t border-gray-100 my-1"></div>
 									<button
 										@click="handleLogout"
 										class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -329,9 +342,27 @@ const { isAuthenticated, user, logout } = authComposable;
 const showMobileMenu = ref(false);
 const showUserMenu = ref(false);
 const showAuthModal = ref(false);
+const authModalMode = ref(false); // false for login, true for signup
+
+const openAuthModal = (isSignUp = false) => {
+	authModalMode.value = isSignUp;
+	showAuthModal.value = true;
+};
 
 const handleLogout = () => {
 	logout();
 	showUserMenu.value = false;
+	navigateTo("/");
 };
+
+// Close user menu when clicking outside
+onMounted(() => {
+	if (process.client) {
+		document.addEventListener('click', (e) => {
+			if (!e.target.closest('.relative')) {
+				showUserMenu.value = false;
+			}
+		});
+	}
+});
 </script>

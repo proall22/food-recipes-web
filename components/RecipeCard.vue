@@ -187,14 +187,46 @@ const likingInProgress = ref(false);
 const isLiked = ref(false);
 
 const toggleLike = async () => {
-	// For now, just toggle the state
-	// TODO: Implement actual like functionality when auth is working
-	isLiked.value = !isLiked.value;
+	const { isAuthenticated } = useAuth();
+	
+	if (!isAuthenticated.value) {
+		// Redirect to login
+		navigateTo('/?auth=login');
+		return;
+	}
+	
+	try {
+		likingInProgress.value = true;
+		
+		// TODO: Implement actual GraphQL mutation
+		// For now, just toggle the state
+		isLiked.value = !isLiked.value;
+		
+		// Update the like count
+		if (isLiked.value) {
+			props.recipe.total_likes = (props.recipe.total_likes || 0) + 1;
+		} else {
+			props.recipe.total_likes = Math.max((props.recipe.total_likes || 0) - 1, 0);
+		}
+	} catch (error) {
+		console.error('Failed to toggle like:', error);
+		// Revert the state on error
+		isLiked.value = !isLiked.value;
+	} finally {
+		likingInProgress.value = false;
+	}
 };
 
 const buyRecipe = async () => {
-	// TODO: Implement payment flow
-	console.log("Buy recipe:", props.recipe.id);
+	const { isAuthenticated } = useAuth();
+	
+	if (!isAuthenticated.value) {
+		navigateTo('/?auth=login');
+		return;
+	}
+	
+	// Navigate to purchase page
+	navigateTo(`/recipes/${props.recipe.id}/purchase`);
 };
 </script>
 
