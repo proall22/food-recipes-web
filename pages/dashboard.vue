@@ -245,6 +245,7 @@ useHead({
 });
 
 const { user } = useAuth();
+const { getDashboardData } = useUserDashboard();
 
 // Reactive data
 const userStats = ref({
@@ -261,9 +262,11 @@ const loading = ref(true);
 // Load dashboard data
 const loadDashboardData = async () => {
 	try {
-		// TODO: Replace with actual GraphQL queries
-		// For now, using mock data
-		userStats.value = {
+		const { mutate: updateUser } = updateUserProfile();
+		await updateUser({
+			id: user.value.id,
+			updates: editForm.value,
+		});
 			recipes: 3,
 			totalLikes: 24,
 			avgRating: 4.2,
@@ -273,47 +276,30 @@ const loadDashboardData = async () => {
 		recentRecipes.value = [
 			{
 				id: "1",
-				title: "Chocolate Chip Cookies",
-				featured_image_url: "https://images.pexels.com/photos/230325/pexels-photo-230325.jpeg?auto=compress&cs=tinysrgb&w=100",
-				total_likes: 15,
-				average_rating: 4.5,
-				is_published: true,
-			},
-			{
-				id: "2",
-				title: "Spaghetti Carbonara",
-				featured_image_url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=100",
-				total_likes: 9,
-				average_rating: 4.0,
-				is_published: false,
-			},
-		];
-
-		recentBookmarks.value = [
-			{
-				id: "1",
-				recipe: {
-					id: "3",
-					title: "Classic Pancakes",
-					featured_image_url: "https://images.pexels.com/photos/376464/pexels-photo-376464.jpeg?auto=compress&cs=tinysrgb&w=100",
-					average_rating: 4.8,
-					user: {
-						full_name: "John Smith",
-					},
-				},
-			},
-		];
-	} catch (error) {
-		console.error("Failed to load dashboard data:", error);
+		if (user.value) {
+			const { result } = getDashboardData(user.value.id);
+			
+			watch(result, (newResult) => {
+				if (newResult) {
+					// Update user stats
+					userStats.value = {
+						recipes: newResult.user_stats?.recipes_aggregate?.aggregate?.count || 0,
+						totalLikes: newResult.total_likes?.aggregate?.count || 0,
+						avgRating: 4.2, // Calculate from ratings
+						bookmarks: newResult.bookmarks_count?.aggregate?.count || 0,
+					};
+					
+					// Update recent recipes
+					recentRecipes.value = newResult.user_recipes || [];
+					
+					// Update recent bookmarks
+					recentBookmarks.value = newResult.user_bookmarks || [];
+				}
+			}, { immediate: true });
+		}
+		loadDashboardData();
 	} finally {
 		loading.value = false;
-	}
-};
-
-// Load data on mount
-onMounted(() => {
-	if (user.value) {
-		loadDashboardData();
 	}
 });
 </script>

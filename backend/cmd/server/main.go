@@ -54,6 +54,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService, hasuraService)
 	fileHandler := handlers.NewFileHandler(fileService)
 	paymentHandler := handlers.NewPaymentHandler(chapaService, hasuraService)
+	notificationHandler := handlers.NewNotificationHandler(hasuraService)
 
 	// Setup Gin router
 	log.Println("Setting up router...")
@@ -97,6 +98,13 @@ func main() {
 			payments.POST("/verify", paymentHandler.VerifyPayment)
 			payments.GET("/status/:transactionId", paymentHandler.GetPaymentStatus)
 		}
+
+		// Notification routes
+		notifications := api.Group("/notifications")
+		notifications.Use(middleware.AuthRequired(cfg.JWTSecret))
+		{
+			notifications.POST("/email", notificationHandler.SendEmailNotification)
+		}
 	}
 
 	// Start server
@@ -108,6 +116,7 @@ func main() {
 	log.Printf("🚀 Server starting on port %s", port)
 	log.Printf("📊 Health check: http://localhost:%s/health", port)
 	log.Printf("🔐 Auth endpoints: http://localhost:%s/api/v1/auth/*", port)
+	log.Printf("📧 Notification endpoints: http://localhost:%s/api/v1/notifications/*", port)
 	
 	if err := r.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)

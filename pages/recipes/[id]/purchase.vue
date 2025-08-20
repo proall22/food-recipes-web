@@ -203,6 +203,8 @@ import {
 	CreditCardIcon,
 	LockClosedIcon,
 } from "@heroicons/vue/24/outline";
+import { usePayments } from "~/composables/usePayments";
+import { useNotifications } from "~/composables/useNotifications";
 
 // Protect this route
 definePageMeta({
@@ -211,6 +213,8 @@ definePageMeta({
 
 const route = useRoute();
 const { user } = useAuth();
+const { initializePayment } = usePayments();
+const { notifyRecipePurchased } = useNotifications();
 const recipeId = route.params.id;
 
 const recipe = ref(null);
@@ -227,23 +231,14 @@ const paymentForm = ref({
 // Load recipe data
 onMounted(async () => {
 	try {
-		// TODO: Replace with actual GraphQL query
-		await new Promise(resolve => setTimeout(resolve, 1000));
+		const { getRecipeById } = useRecipes();
+		const { result } = getRecipeById(recipeId);
 		
-		recipe.value = {
-			id: recipeId,
-			title: "Premium Chocolate Soufflé",
-			description: "An elegant French dessert with step-by-step instructions",
-			featured_image_url: "https://images.pexels.com/photos/291528/pexels-photo-291528.jpeg?auto=compress&cs=tinysrgb&w=400",
-			price: 9.99,
-			prep_time: 30,
-			cook_time: 25,
-			servings: 4,
-			average_rating: 4.8,
-			user: {
-				full_name: "Chef Marie",
-			},
-		};
+		watch(result, (newResult) => {
+			if (newResult?.recipes_by_pk) {
+				recipe.value = newResult.recipes_by_pk;
+			}
+		}, { immediate: true });
 
 		// Pre-fill form with user data
 		if (user.value) {
@@ -263,8 +258,7 @@ const handlePurchase = async () => {
 	processing.value = true;
 	
 	try {
-		// TODO: Implement Chapa payment integration
-		const paymentData = {
+		const result = await initializePayment({
 			recipe_id: recipeId,
 			amount: recipe.value.price,
 			email: paymentForm.value.email,
@@ -273,13 +267,14 @@ const handlePurchase = async () => {
 			last_name: paymentForm.value.lastName,
 			callback_url: `${window.location.origin}/payment/callback`,
 			return_url: `${window.location.origin}/recipes/${recipeId}`,
-		};
+		});
 
-		// Simulate payment processing
-		await new Promise(resolve => setTimeout(resolve, 2000));
-		
-		// Redirect to success page or back to recipe
-		navigateTo(`/recipes/${recipeId}?purchased=true`);
+		if (result.success) {
+			// Payment initialization successful, user will be redirected to Chapa
+			// The callback will handle the rest
+		} else {
+			alert(result.error || "Payment initialization failed. Please try again.");
+		}
 	} catch (error) {
 		console.error("Payment failed:", error);
 		alert("Payment failed. Please try again.");

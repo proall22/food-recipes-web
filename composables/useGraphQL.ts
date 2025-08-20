@@ -1,7 +1,7 @@
-import { useQuery, useMutation } from "@vue/apollo-composable";
+import { useQuery, useMutation, useSubscription } from "@vue/apollo-composable";
 import gql from "graphql-tag";
 
-// GraphQL Queries
+// Enhanced GraphQL Queries with proper Hasura integration
 export const GET_RECIPES = gql`
 	query GetRecipes(
 		$limit: Int!
@@ -20,11 +20,13 @@ export const GET_RECIPES = gql`
 			description
 			prep_time
 			cook_time
+			servings
 			difficulty
 			featured_image_url
 			is_premium
 			price
 			created_at
+			updated_at
 			average_rating
 			total_likes
 			total_comments
@@ -38,6 +40,25 @@ export const GET_RECIPES = gql`
 				id
 				name
 				slug
+			}
+			ingredients {
+				id
+				name
+				amount
+				unit
+				notes
+			}
+			steps {
+				id
+				step_number
+				instruction
+				image_url
+			}
+			images {
+				id
+				image_url
+				is_featured
+				caption
 			}
 		}
 		recipes_aggregate(where: $where) {
@@ -98,6 +119,11 @@ export const GET_RECIPE_BY_ID = gql`
 				is_featured
 				caption
 			}
+		}
+		
+		# Track recipe view
+		insert_recipe_views_one(object: { recipe_id: $id }) {
+			id
 		}
 	}
 `;
@@ -161,13 +187,18 @@ export const GET_CATEGORIES = gql`
 			description
 			icon
 			slug
+			recipes_aggregate {
+				aggregate {
+					count
+				}
+			}
 		}
 	}
 `;
 
 export const GET_POPULAR_RECIPES = gql`
 	query GetPopularRecipes($limit: Int!) {
-		recipes(limit: $limit, order_by: [{ created_at: desc }]) {
+		get_popular_recipes(args: { limit_count: $limit }) {
 			id
 			title
 			description
@@ -198,14 +229,7 @@ export const GET_POPULAR_RECIPES = gql`
 
 export const SEARCH_RECIPES = gql`
 	query SearchRecipes($search_term: String!) {
-		recipes(
-			where: {
-				_or: [
-					{ title: { _ilike: $search_term } }
-					{ description: { _ilike: $search_term } }
-				]
-			}
-		) {
+		search_recipes(args: { search_term: $search_term }) {
 			id
 			title
 			description
@@ -234,12 +258,131 @@ export const SEARCH_RECIPES = gql`
 	}
 `;
 
+export const GET_USER_DASHBOARD_DATA = gql`
+	query GetUserDashboardData($user_id: uuid!) {
+		users_by_pk(id: $user_id) {
+			id
+			username
+			full_name
+			avatar_url
+			bio
+			recipe_count
+		}
+		
+		user_recipes: recipes(
+			where: { user_id: { _eq: $user_id } }
+			order_by: { created_at: desc }
+			limit: 5
+		) {
+			id
+			title
+			featured_image_url
+			is_published
+			total_likes
+			average_rating
+			created_at
+		}
+		
+		user_bookmarks: bookmarks(
+			where: { user_id: { _eq: $user_id } }
+			order_by: { created_at: desc }
+			limit: 5
+		) {
+			id
+			created_at
+			recipe {
+				id
+				title
+				featured_image_url
+				average_rating
+				user {
+					full_name
+				}
+			}
+		}
+		
+		user_stats: users_by_pk(id: $user_id) {
+			recipes_aggregate {
+				aggregate {
+					count
+				}
+			}
+		}
+		
+		total_likes: likes_aggregate(where: { recipe: { user_id: { _eq: $user_id } } }) {
+			aggregate {
+				count
+			}
+		}
+		
+		bookmarks_count: bookmarks_aggregate(where: { user_id: { _eq: $user_id } }) {
+			aggregate {
+				count
+			}
+		}
+	}
+`;
+
+// Real-time subscriptions
+export const SUBSCRIBE_TO_RECIPE_LIKES = gql`
+	subscription SubscribeToRecipeLikes($recipe_id: uuid!) {
+		likes(where: { recipe_id: { _eq: $recipe_id } }) {
+			id
+			user_id
+			created_at
+		}
+		likes_aggregate(where: { recipe_id: { _eq: $recipe_id } }) {
+			aggregate {
+				count
+			}
+		}
+	}
+`;
+
+export const SUBSCRIBE_TO_RECIPE_COMMENTS = gql`
+	subscription SubscribeToRecipeComments($recipe_id: uuid!) {
+		comments(
+			where: { recipe_id: { _eq: $recipe_id } }
+			order_by: { created_at: desc }
+		) {
+			id
+			content
+			created_at
+			user {
+				id
+				username
+				full_name
+				avatar_url
+			}
+		}
+	}
+`;
+
+// Mutations
 export const CREATE_RECIPE = gql`
 	mutation CreateRecipe($recipe: recipes_insert_input!) {
 		insert_recipes_one(object: $recipe) {
 			id
 			title
 			created_at
+		}
+	}
+`;
+
+export const UPDATE_RECIPE = gql`
+	mutation UpdateRecipe($id: uuid!, $updates: recipes_set_input!) {
+		update_recipes_by_pk(pk_columns: { id: $id }, _set: $updates) {
+			id
+			title
+			updated_at
+		}
+	}
+`;
+
+export const DELETE_RECIPE = gql`
+	mutation DeleteRecipe($id: uuid!) {
+		delete_recipes_by_pk(id: $id) {
+			id
 		}
 	}
 `;
@@ -260,11 +403,129 @@ export const UNLIKE_RECIPE = gql`
 	}
 `;
 
-export const GET_USER_LIKES = gql`
-	query GetUserLikes($user_id: uuid!) {
-		likes(where: { user_id: { _eq: $user_id } }) {
+export const BOOKMARK_RECIPE = gql`
+	mutation BookmarkRecipe($recipe_id: uuid!) {
+		insert_bookmarks_one(object: { recipe_id: $recipe_id }) {
 			id
-			recipe_id
+		}
+	}
+`;
+
+export const REMOVE_BOOKMARK = gql`
+	mutation RemoveBookmark($recipe_id: uuid!) {
+		delete_bookmarks(where: { recipe_id: { _eq: $recipe_id } }) {
+			affected_rows
+		}
+	}
+`;
+
+export const ADD_COMMENT = gql`
+	mutation AddComment($recipe_id: uuid!, $content: String!, $parent_id: uuid) {
+		insert_comments_one(object: { 
+			recipe_id: $recipe_id, 
+			content: $content,
+			parent_id: $parent_id
+		}) {
+			id
+			content
+			created_at
+			user {
+				id
+				username
+				full_name
+				avatar_url
+			}
+		}
+	}
+`;
+
+export const RATE_RECIPE = gql`
+	mutation RateRecipe($recipe_id: uuid!, $rating: Int!) {
+		insert_ratings_one(
+			object: { recipe_id: $recipe_id, rating: $rating }
+			on_conflict: { 
+				constraint: ratings_user_id_recipe_id_key, 
+				update_columns: [rating, updated_at] 
+			}
+		) {
+			id
+			rating
+		}
+	}
+`;
+
+export const UPDATE_USER_PROFILE = gql`
+	mutation UpdateUserProfile($id: uuid!, $updates: users_set_input!) {
+		update_users_by_pk(pk_columns: { id: $id }, _set: $updates) {
+			id
+			username
+			full_name
+			avatar_url
+			bio
+			updated_at
+		}
+	}
+`;
+
+export const CREATE_PURCHASE = gql`
+	mutation CreatePurchase($purchase: purchases_insert_input!) {
+		insert_purchases_one(object: $purchase) {
+			id
+			transaction_id
+			status
+		}
+	}
+`;
+
+export const UPDATE_PURCHASE_STATUS = gql`
+	mutation UpdatePurchaseStatus($transaction_id: String!, $status: String!) {
+		update_purchases(
+			where: { transaction_id: { _eq: $transaction_id } }
+			_set: { status: $status }
+		) {
+			affected_rows
+		}
+	}
+`;
+
+// Analytics queries
+export const GET_RECIPE_ANALYTICS = gql`
+	query GetRecipeAnalytics($recipe_id: uuid!) {
+		recipe_views_aggregate(where: { recipe_id: { _eq: $recipe_id } }) {
+			aggregate {
+				count
+			}
+		}
+		
+		recipe_views(
+			where: { recipe_id: { _eq: $recipe_id } }
+			order_by: { created_at: desc }
+			limit: 100
+		) {
+			id
+			created_at
+			user_id
+		}
+		
+		likes_aggregate(where: { recipe_id: { _eq: $recipe_id } }) {
+			aggregate {
+				count
+			}
+		}
+		
+		comments_aggregate(where: { recipe_id: { _eq: $recipe_id } }) {
+			aggregate {
+				count
+			}
+		}
+		
+		ratings_aggregate(where: { recipe_id: { _eq: $recipe_id } }) {
+			aggregate {
+				avg {
+					rating
+				}
+				count
+			}
 		}
 	}
 `;
@@ -301,7 +562,7 @@ export const useRecipes = () => {
 	const searchRecipes = (searchTerm: string) => {
 		return useQuery(
 			SEARCH_RECIPES,
-			{ search_term: `%${searchTerm}%` },
+			{ search_term: searchTerm },
 			{
 				errorPolicy: "all",
 			}
@@ -309,6 +570,7 @@ export const useRecipes = () => {
 	};
 
 	const createRecipe = () => useMutation(CREATE_RECIPE);
+	const updateRecipe = () => useMutation(UPDATE_RECIPE);
 	const deleteRecipe = () => useMutation(DELETE_RECIPE);
 
 	return {
@@ -317,6 +579,7 @@ export const useRecipes = () => {
 		getPopularRecipes,
 		searchRecipes,
 		createRecipe,
+		updateRecipe,
 		deleteRecipe,
 	};
 };
@@ -328,17 +591,6 @@ export const useRecipeInteractions = () => {
 	const removeBookmark = () => useMutation(REMOVE_BOOKMARK);
 	const addComment = () => useMutation(ADD_COMMENT);
 	const rateRecipe = () => useMutation(RATE_RECIPE);
-
-	const getUserLikes = (userId: string) => {
-		return useQuery(
-			GET_USER_LIKES,
-			{ user_id: userId },
-			{
-				errorPolicy: "all",
-				skip: !userId,
-			}
-		);
-	};
 
 	const getUserRecipeInteractions = (userId: string, recipeId: string) => {
 		return useQuery(
@@ -362,6 +614,15 @@ export const useRecipeInteractions = () => {
 		);
 	};
 
+	// Real-time subscriptions
+	const subscribeToRecipeLikes = (recipeId: string) => {
+		return useSubscription(SUBSCRIBE_TO_RECIPE_LIKES, { recipe_id: recipeId });
+	};
+
+	const subscribeToRecipeComments = (recipeId: string) => {
+		return useSubscription(SUBSCRIBE_TO_RECIPE_COMMENTS, { recipe_id: recipeId });
+	};
+
 	return {
 		likeRecipe,
 		unlikeRecipe,
@@ -369,9 +630,10 @@ export const useRecipeInteractions = () => {
 		removeBookmark,
 		addComment,
 		rateRecipe,
-		getUserLikes,
 		getUserRecipeInteractions,
 		getRecipeComments,
+		subscribeToRecipeLikes,
+		subscribeToRecipeComments,
 	};
 };
 
@@ -388,5 +650,52 @@ export const useCategories = () => {
 
 	return {
 		getCategories,
+	};
+};
+
+export const useUserDashboard = () => {
+	const getDashboardData = (userId: string) => {
+		return useQuery(
+			GET_USER_DASHBOARD_DATA,
+			{ user_id: userId },
+			{
+				errorPolicy: "all",
+				skip: !userId,
+			}
+		);
+	};
+
+	const updateUserProfile = () => useMutation(UPDATE_USER_PROFILE);
+
+	return {
+		getDashboardData,
+		updateUserProfile,
+	};
+};
+
+export const useRecipeAnalytics = () => {
+	const getRecipeAnalytics = (recipeId: string) => {
+		return useQuery(
+			GET_RECIPE_ANALYTICS,
+			{ recipe_id: recipeId },
+			{
+				errorPolicy: "all",
+				skip: !recipeId,
+			}
+		);
+	};
+
+	return {
+		getRecipeAnalytics,
+	};
+};
+
+export const usePayments = () => {
+	const createPurchase = () => useMutation(CREATE_PURCHASE);
+	const updatePurchaseStatus = () => useMutation(UPDATE_PURCHASE_STATUS);
+
+	return {
+		createPurchase,
+		updatePurchaseStatus,
 	};
 };

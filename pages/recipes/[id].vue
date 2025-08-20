@@ -347,9 +347,13 @@ import {
 	ChartBarIcon,
 } from "@heroicons/vue/24/outline";
 import { useRecipes, useRecipeInteractions } from "~/composables/useGraphQL";
+import { usePayments } from "~/composables/usePayments";
+import { useNotifications } from "~/composables/useNotifications";
 
 const route = useRoute();
 const { user, isAuthenticated } = useAuth();
+const { checkRecipePurchase } = usePayments();
+const { notifyRecipeLiked, notifyRecipeCommented, notifyRecipeRated } = useNotifications();
 
 // Reactive data
 const recipe = ref(null);
@@ -367,24 +371,33 @@ const { getRecipeById } = useRecipes();
 
 const loadRecipe = async () => {
 	try {
-		const { result } = await getRecipeById(route.params.id);
-		recipe.value = result.value?.recipes_by_pk;
-
-		if (recipe.value) {
-			// Set page title
-			useHead({
-				title: `${recipe.value.title} - RecipeHub`,
-				meta: [{ name: "description", content: recipe.value.description }],
-			});
-
-			// Load user interactions if authenticated
-			if (isAuthenticated.value) {
-				await loadUserInteractions();
+		const { result } = getRecipeById(route.params.id);
+		
+		// Watch for data changes
+		watch(result, (newResult) => {
+			if (newResult?.recipes_by_pk) {
+				recipe.value = newResult.recipes_by_pk;
+				
+				// Set page title
+				useHead({
+					title: `${recipe.value.title} - RecipeHub`,
+					meta: [{ name: "description", content: recipe.value.description }],
+				});
 			}
+		}, { immediate: true });
 
-			// Load comments
-			await loadComments();
+		// Load user interactions if authenticated
+		if (isAuthenticated.value) {
+			await loadUserInteractions();
 		}
+
+		// Check if user has purchased this recipe
+		if (isAuthenticated.value) {
+			hasPurchased.value = await checkRecipePurchase(route.params.id);
+		}
+
+		// Load comments
+		await loadComments();
 	} catch (error) {
 		console.error("Failed to load recipe:", error);
 		throw createError({
@@ -397,24 +410,44 @@ const loadRecipe = async () => {
 };
 
 // Load user interactions
+const { getUserRecipeInteractions } = useRecipeInteractions();
+
 const loadUserInteractions = async () => {
 	try {
-		// Check if user has liked, bookmarked, rated, or purchased this recipe
-		// This would be actual GraphQL queries
-		isLiked.value = false; // Placeholder
-		isBookmarked.value = false; // Placeholder
-		userRating.value = 0; // Placeholder
-		hasPurchased.value = !recipe.value.is_premium; // Free recipes are always "purchased"
+		const { result } = getUserRecipeInteractions(user.value.id, route.params.id);
+		
+		watch(result, (newResult) => {
+			if (newResult) {
+				isLiked.value = newResult.likes?.length > 0;
+				isBookmarked.value = newResult.bookmarks?.length > 0;
+				userRating.value = newResult.ratings?.[0]?.rating || 0;
+			}
+		}, { immediate: true });
 	} catch (error) {
 		console.error("Failed to load user interactions:", error);
 	}
 };
 
 // Load comments
+const { getRecipeComments, subscribeToRecipeComments } = useRecipeInteractions();
+
 const loadComments = async () => {
 	try {
-		// This would be a GraphQL query to get comments
-		comments.value = []; // Placeholder
+		const { result } = getRecipeComments(route.params.id, 10, 0);
+		
+		watch(result, (newResult) => {
+			if (newResult?.comments) {
+				comments.value = newResult.comments;
+			}
+		}, { immediate: true });
+
+		// Subscribe to real-time comment updates
+		const { result: commentsSubscription } = subscribeToRecipeComments(route.params.id);
+		watch(commentsSubscription, (newComments) => {
+			if (newComments?.comments) {
+				comments.value = newComments.comments;
+			}
+		});
 	} catch (error) {
 		console.error("Failed to load comments:", error);
 	}
@@ -428,18 +461,25 @@ const {
 	removeBookmark,
 	addComment: addCommentMutation,
 	rateRecipe: rateRecipeMutation,
+	subscribeToRecipeLikes,
 } = useRecipeInteractions();
 
 const toggleLike = async () => {
 	if (!isAuthenticated.value) return;
 
 	try {
+		const { mutate: like } = likeRecipe();
+		const { mutate: unlike } = unlikeRecipe();
+		
 		if (isLiked.value) {
-			await unlikeRecipe().mutate({ recipe_id: recipe.value.id });
+			await unlike({ recipe_id: recipe.value.id });
 			recipe.value.total_likes--;
 		} else {
-			await likeRecipe().mutate({ recipe_id: recipe.value.id });
+			await like({ recipe_id: recipe.value.id });
 			recipe.value.total_likes++;
+			
+			// Send notification to recipe owner
+			await notifyRecipeLiked(recipe.value.id, user.value.id);
 		}
 		isLiked.value = !isLiked.value;
 	} catch (error) {
@@ -451,10 +491,13 @@ const toggleBookmark = async () => {
 	if (!isAuthenticated.value) return;
 
 	try {
+		const { mutate: bookmark } = bookmarkRecipe();
+		const { mutate: removeBookmarkMutation } = removeBookmark();
+		
 		if (isBookmarked.value) {
-			await removeBookmark().mutate({ recipe_id: recipe.value.id });
+			await removeBookmarkMutation({ recipe_id: recipe.value.id });
 		} else {
-			await bookmarkRecipe().mutate({ recipe_id: recipe.value.id });
+			await bookmark({ recipe_id: recipe.value.id });
 		}
 		isBookmarked.value = !isBookmarked.value;
 	} catch (error) {
@@ -466,11 +509,15 @@ const rateRecipe = async (rating) => {
 	if (!isAuthenticated.value) return;
 
 	try {
-		await rateRecipeMutation().mutate({
+		const { mutate: rate } = rateRecipeMutation();
+		await rate({
 			recipe_id: recipe.value.id,
 			rating,
 		});
 		userRating.value = rating;
+		
+		// Send notification to recipe owner
+		await notifyRecipeRated(recipe.value.id, user.value.id, rating);
 	} catch (error) {
 		console.error("Failed to rate recipe:", error);
 	}
@@ -481,7 +528,8 @@ const addComment = async () => {
 
 	submittingComment.value = true;
 	try {
-		const { data } = await addCommentMutation().mutate({
+		const { mutate: addCommentMut } = addCommentMutation();
+		const { data } = await addCommentMut({
 			recipe_id: recipe.value.id,
 			content: newComment.value.trim(),
 		});
@@ -490,6 +538,9 @@ const addComment = async () => {
 			comments.value.unshift(data.insert_comments_one);
 			newComment.value = "";
 			recipe.value.total_comments++;
+			
+			// Send notification to recipe owner
+			await notifyRecipeCommented(recipe.value.id, user.value.id, newComment.value.trim());
 		}
 	} catch (error) {
 		console.error("Failed to add comment:", error);
@@ -509,6 +560,17 @@ const formatDate = (dateString) => {
 	return new Date(dateString).toLocaleDateString();
 };
 
+// Subscribe to real-time likes updates
+onMounted(() => {
+	if (route.params.id) {
+		const { result: likesSubscription } = subscribeToRecipeLikes(route.params.id);
+		watch(likesSubscription, (newData) => {
+			if (newData?.likes_aggregate?.aggregate?.count !== undefined) {
+				recipe.value.total_likes = newData.likes_aggregate.aggregate.count;
+			}
+		});
+	}
+});
 // Load recipe on mount
 onMounted(() => {
 	loadRecipe();
